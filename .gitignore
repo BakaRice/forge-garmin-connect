@@ -1,0 +1,11 @@
+# Build output
+bin/
+*.prg
+*.iq
+
+# Developer key (本地生成, monkeyc -g)
+developer_key
+developer_key.der
+
+# macOS
+.DS_Store

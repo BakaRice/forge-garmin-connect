@@ -1,0 +1,21 @@
+<drawables>
+    <!-- Launcher Icon: FR255 官方尺寸 40 × 40 (docs/README.md §16) -->
+    <bitmap id="LauncherIcon" filename="launcher_icon.png" />
+
+    <!--
+      中文文案位图 (tools/render_labels.swift 生成)
+      背景: FR255 无矢量字体 API, Garmin 中文字体 > 1MB 超出 512KiB 内存上限,
+      故用渲染好的位图承载中文文案; FORGE 品牌名与数字保持默认字体。
+    -->
+    <bitmap id="LabelStart" filename="label_start.png" />
+    <bitmap id="LabelStop" filename="label_stop.png" />
+    <bitmap id="LabelSave" filename="label_save.png" />
+    <bitmap id="LabelDone" filename="label_done.png" />
+    <bitmap id="LabelSaved" filename="label_saved.png" />
+    <bitmap id="LabelAvgHr" filename="label_avg_hr.png" />
+    <bitmap id="LabelMaxHr" filename="label_max_hr.png" />
+    <bitmap id="LabelErrStart" filename="label_err_start.png" />
+    <bitmap id="LabelErrStop" filename="label_err_stop.png" />
+    <bitmap id="LabelErrSave" filename="label_err_save.png" />
+    <bitmap id="LabelErrDiscard" filename="label_err_discard.png" />
+</drawables>

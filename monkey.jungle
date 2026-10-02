@@ -1,0 +1,4 @@
+# Forge — Connect IQ 工程配置
+project.manifest = manifest.xml
+
+# V1 只构建 FR255 (docs/README.md §18): 构建时通过 -d fr255 指定设备

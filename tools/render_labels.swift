@@ -22,6 +22,12 @@ let labels: [(String, String, CGFloat, NSFont.Weight, NSColor)] = [
     ("label_err_stop",  "停止失败", 16, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
     ("label_err_save",  "保存失败", 16, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
     ("label_err_discard", "放弃失败", 16, .regular, NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
+    // Phase D 确认框
+    ("label_recording",   "记录进行中", 28, .medium,  .white),
+    ("label_discard_ask", "放弃活动？", 28, .medium,  .white),
+    ("label_stop_save",   "停止并保存", 24, .regular, .white),
+    ("label_discard",     "放弃",       24, .regular, .white),
+    ("label_cancel",      "取消",       24, .regular, .white),
 ]
 
 func render(name: String, text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor) {

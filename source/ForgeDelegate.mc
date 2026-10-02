@@ -4,9 +4,9 @@ using Toybox.WatchUi;
 //! Forge 输入代理 (docs/README.md §17)
 //!
 //! 将 FR255 实体按钮映射为 Session 操作 (docs/README.md §14):
-//!   ENTER/START  → Start / Stop / Save
-//!   BACK/ESC     → 退出 / 丢弃
-//!   UP/DOWN      → Phase D: 确认框选择
+//!   ENTER/START  → Start / Stop / Save / 确认
+//!   BACK/ESC     → 退出确认 / 丢弃确认 / 取消
+//!   UP/DOWN      → 确认框选项选择
 //!
 //! 正常流程 (docs/update.md §3.1):
 //!   READY → START → RECORDING → STOP → SUMMARY → SAVE → SAVED → EXIT
@@ -30,11 +30,11 @@ class ForgeDelegate extends WatchUi.BehaviorDelegate {
             case ForgeState.UI_SUMMARY:
                 app.saveSession();
                 break;
+            case ForgeState.UI_CONFIRM:
+                app.confirmSelect();
+                break;
             case ForgeState.UI_SAVED:
                 // 自动退出中, 忽略按键
-                break;
-            case ForgeState.UI_CONFIRM:
-                // Phase D: 执行当前选择 (默认停在 Cancel / No, docs/update.md §3.2)
                 break;
         }
         return true;
@@ -48,16 +48,16 @@ class ForgeDelegate extends WatchUi.BehaviorDelegate {
                 // 允许系统默认行为: 直接退出 App
                 return false;
             case ForgeState.UI_RECORDING:
-                // Phase D: 进入退出确认框; 记录保持继续 (docs/update.md §3.2)
-                // Phase B: 消费 BACK, 不退出
+                // 进入退出确认框; 记录保持继续 (docs/update.md §3.2)
+                app.openConfirm(ForgeState.CONFIRM_EXIT, ForgeState.UI_RECORDING);
                 return true;
             case ForgeState.UI_SUMMARY:
-                // Phase D: 改为丢弃确认框 (默认 No)
-                // Phase B: 直接丢弃并返回 READY
-                app.discardSession();
+                // 进入丢弃确认框; 会话保持停止
+                app.openConfirm(ForgeState.CONFIRM_DISCARD, ForgeState.UI_SUMMARY);
                 return true;
             case ForgeState.UI_CONFIRM:
-                // Phase D: Cancel, 返回进入来源
+                // 取消, 返回进入来源
+                app.cancelConfirm();
                 return true;
             case ForgeState.UI_SAVED:
                 // 已保存, 允许退出
@@ -66,15 +66,21 @@ class ForgeDelegate extends WatchUi.BehaviorDelegate {
         return false;
     }
 
-    //! UP — Phase D: 确认框选择
+    //! UP — 确认框选项上移
     function onPreviousPage() {
-        // Phase D: CONFIRM 状态中切换选项
+        if (getApp().getUiState() == ForgeState.UI_CONFIRM) {
+            getApp().confirmPrev();
+            return true;
+        }
         return false;
     }
 
-    //! DOWN — Phase D: 确认框选择
+    //! DOWN — 确认框选项下移
     function onNextPage() {
-        // Phase D: CONFIRM 状态中切换选项
+        if (getApp().getUiState() == ForgeState.UI_CONFIRM) {
+            getApp().confirmNext();
+            return true;
+        }
         return false;
     }
 

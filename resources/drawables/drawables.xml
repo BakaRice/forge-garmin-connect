@@ -18,4 +18,10 @@
     <bitmap id="LabelErrStop" filename="label_err_stop.png" />
     <bitmap id="LabelErrSave" filename="label_err_save.png" />
     <bitmap id="LabelErrDiscard" filename="label_err_discard.png" />
+    <!-- Phase D 确认框 -->
+    <bitmap id="LabelRecording" filename="label_recording.png" />
+    <bitmap id="LabelDiscardAsk" filename="label_discard_ask.png" />
+    <bitmap id="LabelStopSave" filename="label_stop_save.png" />
+    <bitmap id="LabelDiscard" filename="label_discard.png" />
+    <bitmap id="LabelCancel" filename="label_cancel.png" />
 </drawables>

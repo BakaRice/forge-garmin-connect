@@ -26,6 +26,11 @@ class ForgeView extends WatchUi.View {
     hidden var _imgErrStop = null;
     hidden var _imgErrSave = null;
     hidden var _imgErrDiscard = null;
+    hidden var _imgRecording = null;
+    hidden var _imgDiscardAsk = null;
+    hidden var _imgStopSave = null;
+    hidden var _imgDiscard = null;
+    hidden var _imgCancel = null;
 
     function initialize() {
         View.initialize();
@@ -40,6 +45,11 @@ class ForgeView extends WatchUi.View {
         _imgErrStop = WatchUi.loadResource(Rez.Drawables.LabelErrStop);
         _imgErrSave = WatchUi.loadResource(Rez.Drawables.LabelErrSave);
         _imgErrDiscard = WatchUi.loadResource(Rez.Drawables.LabelErrDiscard);
+        _imgRecording = WatchUi.loadResource(Rez.Drawables.LabelRecording);
+        _imgDiscardAsk = WatchUi.loadResource(Rez.Drawables.LabelDiscardAsk);
+        _imgStopSave = WatchUi.loadResource(Rez.Drawables.LabelStopSave);
+        _imgDiscard = WatchUi.loadResource(Rez.Drawables.LabelDiscard);
+        _imgCancel = WatchUi.loadResource(Rez.Drawables.LabelCancel);
     }
 
     function onUpdate(dc) {
@@ -65,8 +75,7 @@ class ForgeView extends WatchUi.View {
                 drawSaved(dc, cx);
                 break;
             case ForgeState.UI_CONFIRM:
-                // Phase D: 确认界面单独实现
-                drawReady(dc, cx);
+                drawConfirm(dc, cx);
                 break;
         }
 
@@ -183,6 +192,46 @@ class ForgeView extends WatchUi.View {
         dc.drawText(cx, 160, Graphics.FONT_NUMBER_HOT,
             ForgeUtils.formatDuration(session.getDuration()),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+    }
+
+    //! CONFIRM 页面 (docs/README.md §11, docs/update.md §3.2)
+    //! 确认框保留进入来源和待确认动作; 默认停在 Cancel/No;
+    //! 确认框期间会话不受影响 (计时继续 / 汇总保持停止)
+    hidden function drawConfirm(dc, cx) {
+        var app = Application.getApp() as ForgeApp;
+        var action = app.getConfirmAction();
+        var selection = app.getConfirmSelection();
+
+        // 标题
+        drawLabelCenter(dc, cx, 60,
+            (action == ForgeState.CONFIRM_EXIT) ? _imgRecording : _imgDiscardAsk);
+
+        if (action == ForgeState.CONFIRM_EXIT) {
+            // 停止并保存 / 放弃 / 取消
+            drawConfirmOption(dc, cx, 125, _imgStopSave, selection == 0);
+            drawConfirmOption(dc, cx, 160, _imgDiscard, selection == 1);
+            drawConfirmOption(dc, cx, 195, _imgCancel, selection == 2);
+        } else {
+            // 放弃 / 取消
+            drawConfirmOption(dc, cx, 140, _imgDiscard, selection == 0);
+            drawConfirmOption(dc, cx, 175, _imgCancel, selection == 1);
+        }
+    }
+
+    //! 确认框选项: 选中项带三角指示 (纯绘制, 不依赖字体字形)
+    hidden function drawConfirmOption(dc, cx, y, bitmap, selected) {
+        var w = bitmap.getWidth();
+        var h = bitmap.getHeight();
+        var x = cx - w / 2;
+        dc.drawBitmap(x, y - h / 2, bitmap);
+        if (selected) {
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            dc.fillPolygon([
+                [x - 16, y - 7],
+                [x - 16, y + 7],
+                [x - 4,  y]
+            ]);
+        }
     }
 
     //! 错误标识 → 文案位图

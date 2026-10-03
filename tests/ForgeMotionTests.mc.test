@@ -1,0 +1,226 @@
+module ForgeMotionTestSamples {
+    function feed(detector, x, y, z, count, interval) {
+        var completed = 0;
+        for (var i = 0; i < count; i += 1) {
+            if (detector.addSample(x, y, z, interval)) { completed += 1; }
+        }
+        return completed;
+    }
+
+    // 36 degrees out, 36 degrees back, then 150 ms at rest: 950 ms.
+    function cycle(detector) {
+        var completed = feed(detector, 90, 0, 0, 8, 50);
+        completed += feed(detector, -90, 0, 0, 8, 50);
+        completed += feed(detector, 0, 0, 0, 3, 50);
+        return completed;
+    }
+
+    function near(actual, expected) {
+        return actual != null && actual > expected - 0.1 && actual < expected + 0.1;
+    }
+}
+
+(:test)
+function motionStationary(logger) {
+    var detector = new ForgeMotionDetector();
+    var signals = ForgeMotionTestSamples.feed(detector, 0, 0, 0, 400, 50);
+    return signals == 0 && detector.getCount() == 0 && detector.getCadence() == null && detector.getPhase() == 0;
+}
+
+(:test)
+function motionHalfCycleDoesNotCount(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 4, 50);
+    return detector.getCount() == 0 && detector.getPhase() == 1;
+}
+
+(:test)
+function motionCompleteCycleCountsOnQuietFinish(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, -90, 0, 0, 8, 50);
+    var beforeQuiet = detector.getCount() == 0 && detector.getPhase() == 2;
+    var first = detector.addSample(0, 0, 0, 50);
+    var second = detector.addSample(0, 0, 0, 50);
+    var third = detector.addSample(0, 0, 0, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 20, 50);
+    logger.debug("Complete cycle count=" + detector.getCount());
+    return beforeQuiet && !first && !second && third && detector.getCount() == 1 && detector.getCadence() == null && detector.getPhase() == 0;
+}
+
+(:test)
+function motionRepeatedCyclesCadence(logger) {
+    var detector = new ForgeMotionDetector();
+    var signals = 0;
+    for (var i = 0; i < 4; i += 1) { signals += ForgeMotionTestSamples.cycle(detector); }
+    logger.debug("Repeated cycles=" + detector.getCount() + " cadence=" + detector.getCadence());
+    return signals == 4 && detector.getCount() == 4 && ForgeMotionTestSamples.near(detector.getCadence(), 60000.0 / 950.0);
+}
+
+(:test)
+function motionOppositeInitialDirection(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, -90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return detector.getCount() == 1;
+}
+
+(:test)
+function motionAlternateAndDiagonalAxes(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 0, 0, 90, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, -90, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    ForgeMotionTestSamples.feed(detector, 60, -60, 60, 8, 50);
+    ForgeMotionTestSamples.feed(detector, -60, 60, -60, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return detector.getCount() == 2;
+}
+
+(:test)
+function motionSmallAmplitudeOscillation(logger) {
+    var detector = new ForgeMotionDetector();
+    for (var i = 0; i < 100; i += 1) {
+        detector.addSample(40, 0, 0, 50);
+        detector.addSample(-40, 0, 0, 50);
+        detector.addSample(2, -3, 1, 50);
+    }
+    return detector.getCount() == 0;
+}
+
+(:test)
+function motionIncompleteReturnRejected(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, -90, 0, 0, 4, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return detector.getCount() == 0 && detector.getPhase() == 0;
+}
+
+(:test)
+function motionContinuousReversals(logger) {
+    var detector = new ForgeMotionDetector();
+    var signals = ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    signals += ForgeMotionTestSamples.feed(detector, -90, 0, 0, 8, 50);
+    signals += ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    var firstComplete = detector.getCount() == 1;
+    signals += ForgeMotionTestSamples.feed(detector, -90, 0, 0, 8, 50);
+    signals += ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return firstComplete && signals == 2 && detector.getCount() == 2;
+}
+
+(:test)
+function motionPauseMakesCadenceStale(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 199, 50);
+    var before = detector.getCadence() != null;
+    detector.addSample(0, 0, 0, 50);
+    return before && detector.getCadence() == null && detector.getCount() == 2;
+}
+
+(:test)
+function motionResetClearsAllStats(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 4, 50);
+    detector.reset();
+    var clear = detector.getCount() == 0 && detector.getCadence() == null && detector.getPhase() == 0;
+    ForgeMotionTestSamples.cycle(detector);
+    return clear && detector.getCount() == 1 && detector.getCadence() == null;
+}
+
+(:test)
+function motionSampleGapClearsCandidatePreservesCount(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    var gap = detector.addSample(-90, 0, 0, 201);
+    var cleared = detector.getPhase() == 0;
+    ForgeMotionTestSamples.feed(detector, -90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return !gap && cleared && detector.getCount() == 1;
+}
+
+(:test)
+function motionInvalidIntervalsClearCandidate(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.cycle(detector);
+    var invalid = [0, -50, null];
+    for (var i = 0; i < invalid.size(); i += 1) {
+        ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+        if (detector.addSample(-90, 0, 0, invalid[i]) || detector.getPhase() != 0) { return false; }
+    }
+    return detector.getCount() == 1;
+}
+
+(:test)
+function motionMissingGyroClearsCandidate(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    var signal = detector.addSample(null, 0, 0, 50);
+    return !signal && detector.getPhase() == 0 && detector.getCount() == 0;
+}
+
+(:test)
+function motionTooFastCycleRejected(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 360, 0, 0, 2, 50);
+    ForgeMotionTestSamples.feed(detector, -360, 0, 0, 2, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return detector.getCount() == 0;
+}
+
+(:test)
+function motionCandidateTimeout(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 152, 50);
+    var cleared = detector.getPhase() == 0;
+    ForgeMotionTestSamples.feed(detector, -90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return cleared && detector.getCount() == 0;
+}
+
+(:test)
+function motionPerpendicularMovementIsNotReturn(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, -90, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return detector.getCount() == 0;
+}
+
+(:test)
+function motionCadenceUsesOnlyRecentCompletions(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 20, 50);
+    for (var i = 0; i < 6; i += 1) { ForgeMotionTestSamples.cycle(detector); }
+    return detector.getCount() == 7 && ForgeMotionTestSamples.near(detector.getCadence(), 60000.0 / 950.0);
+}
+
+(:test)
+function motionCadenceRestartsAfterLongPause(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.cycle(detector);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 200, 50);
+    ForgeMotionTestSamples.cycle(detector);
+    var first = detector.getCadence() == null;
+    ForgeMotionTestSamples.cycle(detector);
+    return first && detector.getCount() == 4 && ForgeMotionTestSamples.near(detector.getCadence(), 60000.0 / 950.0);
+}
+
+(:test)
+function motionSmallOutboundCannotPairWithLargeReturn(logger) {
+    var detector = new ForgeMotionDetector();
+    ForgeMotionTestSamples.feed(detector, 90, 0, 0, 2, 50);
+    ForgeMotionTestSamples.feed(detector, -90, 0, 0, 8, 50);
+    ForgeMotionTestSamples.feed(detector, 0, 0, 0, 3, 50);
+    return detector.getCount() == 0;
+}

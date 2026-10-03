@@ -24,4 +24,12 @@
     <bitmap id="LabelStopSave" filename="label_stop_save.png" />
     <bitmap id="LabelDiscard" filename="label_discard.png" />
     <bitmap id="LabelCancel" filename="label_cancel.png" />
+    <bitmap id="LabelCycles" filename="label_cycles.png" />
+    <bitmap id="LabelCurrentCadence" filename="label_current_cadence.png" />
+    <bitmap id="LabelAverageCadence" filename="label_average_cadence.png" />
+    <bitmap id="LabelMotionWaiting" filename="label_motion_waiting.png" />
+    <bitmap id="LabelMotionActive" filename="label_motion_active.png" />
+    <bitmap id="LabelMotionStale" filename="label_motion_stale.png" />
+    <bitmap id="LabelMotionUnsupported" filename="label_motion_unsupported.png" />
+    <bitmap id="LabelMotionError" filename="label_motion_error.png" />
 </drawables>

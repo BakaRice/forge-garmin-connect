@@ -1,3 +1,7 @@
 <strings>
     <string id="AppName">Forge</string>
+    <string id="MotionCycles">往返次数</string>
+    <string id="MotionCyclesUnit">次</string>
+    <string id="MotionAverageCadence">平均频率</string>
+    <string id="MotionCadenceUnit">次/分钟</string>
 </strings>

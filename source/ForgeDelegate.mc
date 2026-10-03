@@ -17,9 +17,21 @@ class ForgeDelegate extends WatchUi.BehaviorDelegate {
         BehaviorDelegate.initialize();
     }
 
+    //! Temporary diagnostic probes: observe raw events without consuming them.
+    function onKeyPressed(keyEvent) {
+        getApp().setDbgStage("PRESS " + keyEvent.getKey());
+        return false;
+    }
+
+    function onKey(keyEvent) {
+        getApp().setDbgStage("KEY " + keyEvent.getKey());
+        return false;
+    }
+
     //! ENTER / START
     function onSelect() {
         var app = getApp();
+        app.dbgS();
         switch (app.getUiState()) {
             case ForgeState.UI_READY:
                 app.startSession();
@@ -43,6 +55,7 @@ class ForgeDelegate extends WatchUi.BehaviorDelegate {
     //! BACK / ESC
     function onBack() {
         var app = getApp();
+        app.dbgB();
         switch (app.getUiState()) {
             case ForgeState.UI_READY:
                 // 允许系统默认行为: 直接退出 App
@@ -68,20 +81,24 @@ class ForgeDelegate extends WatchUi.BehaviorDelegate {
 
     //! UP — 确认框选项上移
     function onPreviousPage() {
-        if (getApp().getUiState() == ForgeState.UI_CONFIRM) {
-            getApp().confirmPrev();
+        var app = getApp();
+        app.dbgU();
+        if (app.getUiState() == ForgeState.UI_CONFIRM) {
+            app.confirmPrev();
             return true;
         }
-        return false;
+        return app.toggleMetricsPage();
     }
 
     //! DOWN — 确认框选项下移
     function onNextPage() {
-        if (getApp().getUiState() == ForgeState.UI_CONFIRM) {
-            getApp().confirmNext();
+        var app = getApp();
+        app.dbgD();
+        if (app.getUiState() == ForgeState.UI_CONFIRM) {
+            app.confirmNext();
             return true;
         }
-        return false;
+        return app.toggleMetricsPage();
     }
 
     hidden function getApp() {

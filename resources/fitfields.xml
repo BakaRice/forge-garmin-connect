@@ -1,0 +1,6 @@
+<resources>
+    <fitContributions>
+        <fitField id="0" displayInActivitySummary="true" sortOrder="0" precision="0" dataLabel="@Strings.MotionCycles" unitLabel="@Strings.MotionCyclesUnit"/>
+        <fitField id="1" displayInActivitySummary="true" sortOrder="1" precision="1" dataLabel="@Strings.MotionAverageCadence" unitLabel="@Strings.MotionCadenceUnit"/>
+    </fitContributions>
+</resources>

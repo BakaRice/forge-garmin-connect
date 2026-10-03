@@ -18,6 +18,7 @@
         <iq:permissions>
             <!-- docs/update.md §5.1: ActivityRecording 需要 Fit 权限 -->
             <iq:uses-permission id="Fit"/>
+            <iq:uses-permission id="FitContributor"/>
             <!-- docs/update.md §5.1: Toybox.Sensor 需要 Sensor 权限 (Phase B 心率) -->
             <iq:uses-permission id="Sensor"/>
         </iq:permissions>

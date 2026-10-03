@@ -1,0 +1,74 @@
+using Toybox.System;
+
+module ForgeTestClock {
+    var now = 0;
+    function getTimer() { return now; }
+}
+
+(:test)
+function acceptsFirstNegativeTimer(logger) {
+    var app = new ForgeApp();
+    ForgeTestClock.now = -1202805866;
+    var allowed = !app.debounced();
+    logger.debug("Screenshot timer first START allowed=" + allowed);
+    return allowed;
+}
+
+(:test)
+function acceptsFirstZeroTimer(logger) {
+    var app = new ForgeApp();
+    ForgeTestClock.now = 0;
+    var allowed = !app.debounced();
+    logger.debug("First START at timer zero allowed=" + allowed);
+    return allowed;
+}
+
+(:test)
+function preservesDebounceWindow(logger) {
+    var app = new ForgeApp();
+    ForgeTestClock.now = 1000;
+    var first = !app.debounced();
+    ForgeTestClock.now = 1499;
+    var blocked = app.debounced();
+    ForgeTestClock.now = 1500;
+    var next = !app.debounced();
+    logger.debug("Positive timer debounce=" + first + "/" + blocked + "/" + next);
+    return first && blocked && next;
+}
+
+(:test)
+function handlesNegativeTimerSequence(logger) {
+    var app = new ForgeApp();
+    ForgeTestClock.now = -1202805866;
+    var first = !app.debounced();
+    ForgeTestClock.now = -1202805766;
+    var blocked = app.debounced();
+    ForgeTestClock.now = -1202805366;
+    var next = !app.debounced();
+    logger.debug("Negative timer debounce=" + first + "/" + blocked + "/" + next);
+    return first && blocked && next;
+}
+
+(:test)
+function handlesSignedTimerRollover(logger) {
+    var app = new ForgeApp();
+    ForgeTestClock.now = 2147483600;
+    var first = !app.debounced();
+    ForgeTestClock.now = 0x80000000;
+    var blocked = app.debounced();
+    ForgeTestClock.now = -2147483196;
+    var next = !app.debounced();
+    logger.debug("Signed rollover debounce=" + first + "/" + blocked + "/" + next);
+    return first && blocked && next;
+}
+
+(:test)
+function acceptsLongGapWithNegativeDelta(logger) {
+    var app = new ForgeApp();
+    ForgeTestClock.now = 1000;
+    var first = !app.debounced();
+    ForgeTestClock.now = -1202805866;
+    var next = !app.debounced();
+    logger.debug("Long interval allowed=" + next);
+    return first && next;
+}

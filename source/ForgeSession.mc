@@ -1,3 +1,5 @@
+using Toybox.Application;
+using Toybox.System;
 using Toybox.Activity;
 using Toybox.ActivityRecording;
 using Toybox.Sensor;
@@ -19,6 +21,8 @@ class ForgeSession {
 
     //! Garmin ActivityRecording.Session 句柄
     hidden var _session = null;
+    hidden var _motion = null;
+    hidden var _motionFit = null;
 
     //! 停止时固定的本次汇总快照 (docs/update.md §5.2: 保存前固定,
     //! 避免保存后 Session 关闭导致界面丢失数据)
@@ -37,7 +41,9 @@ class ForgeSession {
     //! 2. createSession + start, 逐一检查返回值
     //! 失败: 保留引用核对状态, 受控清理, 绝不创建第二个 Session
     function start() {
+        trace("SESSION_START");
         if (_session != null) {
+            trace("HAS_SESSION");
             // 上一会话尚未关闭: 不允许开始下一会话 (docs/update.md §3.2)
             return false;
         }
@@ -45,33 +51,73 @@ class ForgeSession {
         // 心率来源策略 (docs/update.md §5.1): 系统可用心率来源
         // 传感器启用失败不阻塞 Session (docs/README.md §24: Sensor 数据永远是 Optional)
         try {
+            trace("SENSOR");
             Sensor.setEnabledSensors([Sensor.SENSOR_HEARTRATE]);
         } catch (e) {
+            System.println("[FORGE-FIX1003] SENSOR_EXCEPTION " + e.getErrorMessage());
             // 忽略: 无心率时活动仍可正常记录
         }
 
-        // SDK 9 类型定义中 createSession 返回非空 Session
-        _session = ActivityRecording.createSession({
-            :name     => "Forge",
-            :sport    => Activity.SPORT_GENERIC,     // docs/update.md §4:
-            :subSport => Activity.SUB_SPORT_GENERIC  // 不使用已弃用的旧枚举
-        });
-        _state = ForgeState.SESSION_PREPARED;
+        // SDK 9 类型定义中 createSession 返回非空 Session,
+        // 但真机存在运行时失败路径 (docs/update.md §4: 处理创建选项无效等异常),
+        // 统一 try/catch 兜底, 失败显示错误而不是闪退
+        var session = null;
+        try {
+            trace("CREATE");
+            session = ActivityRecording.createSession({
+                :name     => "Forge",
+                :sport    => Activity.SPORT_GENERIC,     // docs/update.md §4:
+                :subSport => Activity.SUB_SPORT_GENERIC  // 不使用已弃用的旧枚举
+            });
+        } catch (e) {
+            trace("CREATE_EX");
+            System.println("[FORGE-FIX1003] CREATE_EXCEPTION " + e.getErrorMessage());
+            session = null;
+        }
 
-        if (!_session.start()) {
-            // start 失败: 保留引用并核对实际记录状态, 受控清理 (docs/update.md §4)
-            if (_session.isRecording()) {
-                // 实际已在记录: 按已开始处理
-                _state = ForgeState.SESSION_RECORDING;
-                return true;
-            }
-            _session.discard();
-            _session = null;
+        if (session == null) {
+            if ((Application.getApp() as ForgeApp).getDbgStage() != "CREATE_EX") { trace("CREATE_NULL"); }
+            // 创建失败: 不进入 Recording (docs/update.md §4)
             _state = ForgeState.SESSION_IDLE;
             return false;
         }
 
+        _session = session;
+        _state = ForgeState.SESSION_PREPARED;
+
+        var startFailure = "START_FALSE";
+        var started = false;
+        try {
+            trace("START");
+            started = _session.start();
+            System.println("[FORGE-FIX1003] start result=" + started);
+        } catch (e) {
+            trace("START_EX");
+            startFailure = "START_EX";
+            System.println("[FORGE-FIX1003] START_EXCEPTION " + e.getErrorMessage());
+            started = false;
+        }
+
+        if (!started) {
+            // start 失败: 保留引用并核对实际记录状态, 受控清理 (docs/update.md §4)
+            if (_session.isRecording()) {
+                // 实际已在记录: 按已开始处理
+                _state = ForgeState.SESSION_RECORDING;
+                trace("RECORDING");
+                startMotion();
+                return true;
+            }
+            trace("CLEANUP");
+            _session.discard();
+            _session = null;
+            _state = ForgeState.SESSION_IDLE;
+            trace(startFailure);
+            return false;
+        }
+
+        trace("RECORDING");
         _state = ForgeState.SESSION_RECORDING;
+        startMotion();
         return true;
     }
 
@@ -83,11 +129,20 @@ class ForgeSession {
             return false;
         }
 
-        if (!_session.stop()) {
+        updateMotionFit();
+        var stopped = false;
+        try {
+            stopped = _session.stop();
+        } catch (e) {
+            stopped = false;
+        }
+
+        if (!stopped) {
             return false;
         }
 
         _state = ForgeState.SESSION_STOPPED;
+        stopMotion();
 
         // 固定快照 (docs/update.md §5.2: 保存前固定)
         // getActivityInfo() 在 SDK 9 类型定义为非空返回
@@ -105,7 +160,14 @@ class ForgeSession {
             return false;
         }
 
-        if (!_session.save()) {
+        var saved = false;
+        try {
+            saved = _session.save();
+        } catch (e) {
+            saved = false;
+        }
+
+        if (!saved) {
             return false;
         }
 
@@ -121,7 +183,14 @@ class ForgeSession {
             return false;
         }
 
-        if (!_session.discard()) {
+        var discarded = false;
+        try {
+            discarded = _session.discard();
+        } catch (e) {
+            discarded = false;
+        }
+
+        if (!discarded) {
             return false;
         }
 
@@ -132,12 +201,18 @@ class ForgeSession {
 
     //! 关闭会话后释放引用和传感器资源 (docs/update.md §5.1)
     hidden function release() {
+        stopMotion();
+        if (_motionFit != null) { _motionFit.release(); }
         _session = null;
         try {
             Sensor.setEnabledSensors([]);
         } catch (e) {
             // 释放失败不阻塞
         }
+    }
+
+    hidden function trace(stage) {
+        (Application.getApp() as ForgeApp).setDbgStage(stage);
     }
 
     //! 当前会话状态
@@ -171,5 +246,40 @@ class ForgeSession {
     //! 最大心率 (bpm) — Activity.Info.maxHeartRate, 原生值优先
     function getMaxHeartRate() {
         return _maxHr;
+    }
+    hidden function startMotion() {
+        _durationMs = 0; _avgHr = null; _maxHr = null;
+        if (_motion != null) { _motion.stop(); }
+        _motion = new ForgeMotion();
+        _motionFit = new ForgeMotionFit();
+        _motion.start(method(:onMotionUpdate));
+    }
+
+    function onMotionUpdate() { updateMotionFit(); }
+
+    hidden function updateMotionFit() {
+        if (_state != ForgeState.SESSION_RECORDING || _session == null || _motionFit == null) { return; }
+        _motionFit.update(_session, getMotionCount(), getAverageMotionCadence());
+    }
+
+    function stopMotion() { if (_motion != null) { _motion.stop(); } }
+    function getMotionCount() { return _motion != null ? _motion.getCount() : null; }
+    function getCurrentMotionCadence() { return _motion != null ? _motion.getCadence() : null; }
+    function getAverageMotionCadence() {
+        var count = getMotionCount();
+        var duration = getDuration();
+        return count != null && duration > 0 ? count * 60000.0 / duration : null;
+    }
+    function getMotionStatus() { return _motion != null ? _motion.getStatus() : "idle"; }
+    function getMotionPhase() { return _motion != null ? _motion.getPhase() : 0; }
+    function getMotionAccelStatus() { return _motion != null ? _motion.getAccelStatus() : "waiting"; }
+    function getMotionAccelDebug() {
+        var status = getMotionAccelStatus();
+        if (status.equals("active")) { return "A1"; }
+        if (status.equals("missing")) { return "A0"; }
+        if (status.equals("unsupported")) { return "A-"; }
+        if (status.equals("stale")) { return "Ast"; }
+        if (status.equals("error")) { return "A!"; }
+        return "A?";
     }
 }

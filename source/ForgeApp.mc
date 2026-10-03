@@ -15,6 +15,7 @@ class ForgeApp extends Application.AppBase {
 
     //! 当前界面状态 (ForgeState.UI_*)
     hidden var _uiState = ForgeState.UI_READY;
+    hidden var _metricsPage = 0;
 
     //! 确认框进入来源与待确认动作 (docs/update.md §3.2)
     hidden var _confirmOrigin = ForgeState.UI_READY;
@@ -25,7 +26,14 @@ class ForgeApp extends Application.AppBase {
     hidden var _errorId = ForgeState.ERROR_NONE;
 
     //! 上次操作时间戳 (防抖)
-    hidden var _lastActionAt = 0;
+    hidden var _lastActionAt = null;
+
+    //! 调试: 按键计数和最近阶段 (个人使用时保留)
+    hidden var _dbgStage = "CYCLE1003 READY";
+    hidden var _dbgS = 0;  // START/ENTER
+    hidden var _dbgB = 0;  // BACK/ESC
+    hidden var _dbgU = 0;  // UP
+    hidden var _dbgD = 0;  // DOWN
 
     //! 核心业务对象，惰性创建
     hidden var _session = null;
@@ -51,6 +59,8 @@ class ForgeApp extends Application.AppBase {
         if (_session != null && _session.getState() != ForgeState.SESSION_CLOSED) {
             _session.discard();
         }
+        if (_session != null) { _session.stopMotion(); }
+        stopUiTimer();
     }
 
     //! 入口 View + Delegate
@@ -61,6 +71,14 @@ class ForgeApp extends Application.AppBase {
     //! 当前界面状态
     function getUiState() {
         return _uiState;
+    }
+
+    function getMetricsPage() { return _metricsPage; }
+    function toggleMetricsPage() {
+        if (_uiState != ForgeState.UI_RECORDING && _uiState != ForgeState.UI_SUMMARY) { return false; }
+        _metricsPage = 1 - _metricsPage;
+        WatchUi.requestUpdate();
+        return true;
     }
 
     //! 切换界面状态并刷新 UI
@@ -82,8 +100,17 @@ class ForgeApp extends Application.AppBase {
     //! 防抖: 距上次操作不足 DEBOUNCE_MS 时忽略本次按键 (docs/update.md §9)
     hidden function debounced() {
         var now = System.getTimer();
-        if (now - _lastActionAt < DEBOUNCE_MS) {
-            return true;
+        System.println("[FORGE-FIX1003] debounce now=" + now + " last=" + _lastActionAt);
+        // getTimer() is a signed 32-bit counter and can be negative after rollover.
+        // No prior action: always accept the first press, regardless of timer value.
+        if (_lastActionAt != null) {
+            var elapsed = now - _lastActionAt;
+            // Short signed-boundary crossings wrap to the correct positive delta.
+            // A negative delta means a long interval/reset, not a rapid repeat.
+            if (elapsed >= 0 && elapsed < DEBOUNCE_MS) {
+                setDbgStage("DB " + now);
+                return true;
+            }
         }
         _lastActionAt = now;
         return false;
@@ -99,9 +126,11 @@ class ForgeApp extends Application.AppBase {
 
     //! START — 开始记录 (docs/update.md §3.1: 成功才进入下一状态)
     function startSession() {
+        setDbgStage("APP_START");
         if (debounced()) { return; }
         _errorId = ForgeState.ERROR_NONE;
         if (getSession().start()) {
+            _metricsPage = 0;
             setUiState(ForgeState.UI_RECORDING);
             startUiTimer();
         } else {
@@ -250,6 +279,25 @@ class ForgeApp extends Application.AppBase {
 
     function getConfirmSelection() {
         return _confirmSelection;
+    }
+
+    //! 调试: 按键计数 (定位后移除)
+    function setDbgStage(stage) {
+        _dbgStage = stage;
+        System.println("[FORGE-FIX1003] " + stage);
+        WatchUi.requestUpdate();
+    }
+
+    function getDbgStage() { return _dbgStage; }
+
+    function dbgS() as Void { _dbgS++; setDbgStage("SELECT"); }
+    function dbgB() as Void { _dbgB++; }
+    function dbgU() as Void { _dbgU++; }
+    function dbgD() as Void { _dbgD++; }
+
+    function getDbgLine() {
+        return "S" + _dbgS + " B" + _dbgB + " U" + _dbgU + " D" + _dbgD
+            + " st" + getSession().getState();
     }
 
     //! 每秒刷新一次界面 (仅 UI, 不改数据)

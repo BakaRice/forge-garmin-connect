@@ -11,23 +11,31 @@ let outDir = "resources/drawables"
 
 // (文件名, 文案, 字号, 字重, 颜色)
 let labels: [(String, String, CGFloat, NSFont.Weight, NSColor)] = [
-    ("label_start",     "开始",     48, .semibold, .white),
-    ("label_stop",      "停止",     48, .semibold, .white),
-    ("label_save",      "保存",     48, .semibold, .white),
-    ("label_done",      "完成",     30, .medium,   .white),
-    ("label_saved",     "已保存",   34, .semibold, .white),
-    ("label_avg_hr",    "平均心率", 22, .regular,  .white),
-    ("label_max_hr",    "最大心率", 22, .regular,  .white),
-    ("label_err_start", "开始失败", 16, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
-    ("label_err_stop",  "停止失败", 16, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
-    ("label_err_save",  "保存失败", 16, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
-    ("label_err_discard", "放弃失败", 16, .regular, NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
+    ("label_start",     "开始",     24, .semibold, .white),
+    ("label_stop",      "停止",     24, .semibold, .white),
+    ("label_save",      "保存",     24, .semibold, .white),
+    ("label_done",      "完成",     20, .medium,   .white),
+    ("label_saved",     "已保存",   26, .semibold, .white),
+    ("label_avg_hr",    "平均心率", 16, .regular,  .white),
+    ("label_max_hr",    "最大心率", 16, .regular,  .white),
+    ("label_err_start", "开始失败", 12, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
+    ("label_err_stop",  "停止失败", 12, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
+    ("label_err_save",  "保存失败", 12, .regular,  NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
+    ("label_err_discard", "放弃失败", 12, .regular, NSColor(calibratedRed: 1.0, green: 0.25, blue: 0.25, alpha: 1.0)),
+    ("label_cycles", "往返次数", 16, .regular, .white),
+    ("label_current_cadence", "当前频率", 16, .regular, .white),
+    ("label_average_cadence", "平均频率", 16, .regular, .white),
+    ("label_motion_waiting", "等待动作数据", 14, .regular, .lightGray),
+    ("label_motion_active", "动作记录中", 14, .regular, .lightGray),
+    ("label_motion_stale", "动作数据中断", 14, .regular, .lightGray),
+    ("label_motion_unsupported", "动作传感器不可用", 14, .regular, .lightGray),
+    ("label_motion_error", "动作传感器异常", 14, .regular, .lightGray),
     // Phase D 确认框
-    ("label_recording",   "记录进行中", 28, .medium,  .white),
-    ("label_discard_ask", "放弃活动？", 28, .medium,  .white),
-    ("label_stop_save",   "停止并保存", 24, .regular, .white),
-    ("label_discard",     "放弃",       24, .regular, .white),
-    ("label_cancel",      "取消",       24, .regular, .white),
+    ("label_recording",   "记录进行中", 24, .medium,  .white),
+    ("label_discard_ask", "放弃活动？", 24, .medium,  .white),
+    ("label_stop_save",   "停止并保存", 22, .regular, .white),
+    ("label_discard",     "放弃",       22, .regular, .white),
+    ("label_cancel",      "取消",       22, .regular, .white),
 ]
 
 func render(name: String, text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor) {
@@ -35,7 +43,7 @@ func render(name: String, text: String, size: CGFloat, weight: NSFont.Weight, co
     let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
     let str = NSAttributedString(string: text, attributes: attrs)
     let bounds = str.size()
-    let pad: CGFloat = 8
+    let pad: CGFloat = 4
     let w = Int(ceil(bounds.width + pad * 2))
     let h = Int(ceil(bounds.height + pad * 2))
 

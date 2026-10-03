@@ -1,0 +1,299 @@
+using Toybox.Lang;
+using Toybox.FitContributor;
+using Toybox.Application;
+
+class IntegrationSettings { var monkeyVersion = [5,1,1]; }
+module IntegrationClock { var time = 0; var settings = null; function now() { return time; } function getDeviceSettings() { return settings; } }
+module IntegrationSensor {
+    const SENSOR_HEARTRATE = 1;
+    const SENSOR_GYROSCOPE = 2;
+    const SENSOR_ACCELEROMETER = 3;
+    var rate = 100;
+    var accelRate = 100;
+    var fails = false;
+    var listener = null;
+    var late = null;
+    var options as Lang.Dictionary or Null = null;
+    var unregisters = 0;
+    function setEnabledSensors(sensors) {}
+    function getMaxSampleRateForSensorType(type) { return type == :gyroscope ? rate : accelRate; }
+    function registerSensorDataListener(callback, opts) {
+        if (fails) { throw new Lang.InvalidValueException("register"); }
+        listener = callback; late = callback; options = opts;
+    }
+    function unregisterSensorDataListener() { listener = null; unregisters += 1; }
+    function emit(data) { if (listener != null) { listener.invoke(data); } }
+}
+class IntegrationAxes {
+    var x; var y; var z; var timestamp = null;
+    function initialize(a, b, c) { x = a; y = b; z = c; }
+}
+class IntegrationData {
+    var gyroscopeData; var accelerometerData;
+    function initialize(g) { gyroscopeData = g; accelerometerData = new IntegrationAxes([0], [0], [1000]); }
+}
+class IntegrationField {
+    var id; var type; var opts as Lang.Dictionary; var name; var value = null;
+    function initialize(n, i, t, o) { name = n; id = i; type = t; opts = o; }
+    function setData(v) {
+        if (IntegrationRecording.writeFail) { throw new Lang.InvalidValueException("write"); }
+        value = v;
+    }
+}
+class IntegrationNativeSession {
+    var recording = false; var fields as Lang.Array<IntegrationField> = []; var stopCount = null; var stopAverage = null;
+    function start() { recording = IntegrationRecording.startResult; return recording; }
+    function isRecording() { return recording; }
+    function stop() {
+        if (fields.size() > 0) { stopCount = fields[0].value; }
+        if (fields.size() > 1) { stopAverage = fields[1].value; }
+        if (!IntegrationRecording.stopResult) { return false; }
+        recording = false; return true;
+    }
+    function save() { return IntegrationRecording.saveResult; }
+    function discard() { return IntegrationRecording.discardResult; }
+    function createField(name, id, type, opts) {
+        IntegrationRecording.creations += 1;
+        if (IntegrationRecording.fitFail) { throw new Lang.InvalidValueException("field"); }
+        var f = new IntegrationField(name, id, type, opts); fields.add(f); return f;
+    }
+}
+module IntegrationRecording {
+    var nativeSession = null; var startResult = true; var stopResult = true;
+    var saveResult = true; var discardResult = true; var fitFail = false; var writeFail = false; var creations = 0;
+    function createSession(opts) { nativeSession = new IntegrationNativeSession(); return nativeSession; }
+}
+class IntegrationInfo { var timerTime = 0; var currentHeartRate = null; var averageHeartRate = null; var maxHeartRate = null; }
+module IntegrationActivity {
+    const SPORT_GENERIC = 0; const SUB_SPORT_GENERIC = 0;
+    var info = null;
+    function getActivityInfo() { return info; }
+}
+class ForgeView extends Toybox.WatchUi.View { function initialize() { View.initialize(); } }
+module IntegrationUi { var updates = 0; var exits = 0; function requestUpdate() { updates += 1; } function exit() { exits += 1; } }
+module IntegrationTimer { class Timer { function initialize() {} function start(callback, delay, repeat) {} function stop() {} } }
+module IntegrationApplication { var app = null; function getApp() { return app; } }
+module IntegrationSamples {
+    function reset() {
+        IntegrationClock.time = 0; IntegrationClock.settings = new IntegrationSettings(); IntegrationSensor.rate = 100; IntegrationSensor.accelRate = 100;
+        IntegrationSensor.fails = false; IntegrationSensor.listener = null; IntegrationSensor.late = null;
+        IntegrationSensor.unregisters = 0; IntegrationSensor.options = null;
+        IntegrationRecording.startResult = true; IntegrationRecording.stopResult = true;
+        IntegrationRecording.saveResult = true; IntegrationRecording.discardResult = true;
+        IntegrationRecording.fitFail = false; IntegrationRecording.writeFail = false; IntegrationRecording.creations = 0;
+        IntegrationActivity.info = new IntegrationInfo(); IntegrationApplication.app = new ForgeApp();
+    }
+    function batch(value, size) {
+        var x = []; var y = []; var z = [];
+        for (var i=0; i<size; i+=1) { x.add(value); y.add(0); z.add(0); }
+        IntegrationClock.time += size * 20;
+        IntegrationActivity.info.timerTime += size * 20;
+        IntegrationSensor.emit(new IntegrationData(new IntegrationAxes(x,y,z)));
+    }
+    function cycle() { batch(90,20); batch(-90,20); batch(0,6); }
+    function near(value, expected) { return value != null && value > expected-0.1 && value < expected+0.1; }
+    function session() { reset(); var s = new ForgeSession(); s.start(); return s; }
+}
+
+(:test) function integrationWaiting(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null);
+    return m.getCount() == null && m.getCadence() == null && m.getStatus().equals("waiting");
+}
+(:test) function integrationStationaryIsZero(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.batch(0,50);
+    return m.getCount() == 0 && m.getStatus().equals("active");
+}
+(:test) function integrationFullBatches(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.cycle(); IntegrationSamples.cycle();
+    return m.getCount() == 2 && IntegrationSamples.near(m.getCadence(),60000.0/920.0);
+}
+(:test) function integrationRequestedRates(logger) {
+    IntegrationSamples.reset(); IntegrationSensor.rate = 25; IntegrationSensor.accelRate = 20;
+    var m = new ForgeMotion(); m.start(null); var o = IntegrationSensor.options as Lang.Dictionary;
+    return o != null && o[:period] == 1 && o[:synchronous] && (o[:gyroscope] as Lang.Dictionary)[:sampleRate] == 25 && (o[:accelerometer] as Lang.Dictionary)[:sampleRate] == 20;
+}
+(:test) function integrationUnsupported(logger) {
+    IntegrationSamples.reset(); IntegrationSensor.rate = 0; var m = new ForgeMotion(); m.start(null);
+    return m.getCount() == null && m.getStatus().equals("unsupported") && IntegrationSensor.listener == null;
+}
+(:test) function integrationRegistrationFailure(logger) {
+    IntegrationSamples.reset(); IntegrationSensor.fails = true; var m = new ForgeMotion(); m.start(null);
+    return m.getCount() == null && m.getStatus().equals("error");
+}
+(:test) function integrationMissingData(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSensor.emit(new IntegrationData(null));
+    return m.getCount() == null;
+}
+(:test) function integrationMismatchedAxes(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.batch(90,20);
+    IntegrationSensor.emit(new IntegrationData(new IntegrationAxes([0,0],[0],[0,0])));
+    IntegrationSamples.batch(-90,20); IntegrationSamples.batch(0,6);
+    return m.getCount() == 0;
+}
+(:test) function integrationDroppedBatch(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.batch(90,20);
+    IntegrationClock.time += 1000; IntegrationSamples.batch(-90,20); IntegrationSamples.batch(0,6);
+    return m.getCount() == 0;
+}
+(:test) function integrationSignedTimer(logger) {
+    IntegrationSamples.reset(); IntegrationClock.time = -2147483600; var m = new ForgeMotion(); m.start(null);
+    IntegrationSamples.cycle(); return m.getCount() == 1;
+}
+(:test) function integrationTimerWrap(logger) {
+    IntegrationSamples.reset(); IntegrationClock.time = 2147483000; var m = new ForgeMotion(); m.start(null);
+    IntegrationSamples.cycle(); IntegrationSamples.cycle(); return m.getCount() == 2;
+}
+(:test) function integrationStale(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.cycle(); IntegrationSamples.cycle();
+    IntegrationClock.time += 11000;
+    return m.getCount() == 2 && m.getCadence() == null && m.getStatus().equals("stale");
+}
+(:test) function integrationMotionStopFreeze(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.cycle(); m.stop();
+    if (IntegrationSensor.late == null) { return false; }
+    IntegrationSensor.late.invoke(new IntegrationData(new IntegrationAxes([90],[0],[0])));
+    m.stop(); return m.getCount() == 1 && m.getPhase() == 0 && m.getStatus().equals("stopped") && IntegrationSensor.unregisters == 1;
+}
+(:test) function integrationNativeStartFailure(logger) {
+    IntegrationSamples.reset(); IntegrationRecording.startResult = false; var s = new ForgeSession();
+    return !s.start() && IntegrationSensor.listener == null;
+}
+(:test) function integrationSessionStopFreeze(logger) {
+    var s = IntegrationSamples.session(); IntegrationSamples.cycle(); IntegrationActivity.info.timerTime = 2000;
+    var stopped = s.stop(); IntegrationActivity.info.timerTime = 9000;
+    if (IntegrationSensor.late == null) { return false; }
+    IntegrationSensor.late.invoke(new IntegrationData(new IntegrationAxes([90],[0],[0])));
+    return stopped && s.getMotionCount() == 1 && IntegrationSamples.near(s.getAverageMotionCadence(),30) && s.getDuration() == 2000 && IntegrationSensor.listener == null;
+}
+(:test) function integrationFailedStopKeepsSampling(logger) {
+    var s = IntegrationSamples.session(); IntegrationRecording.stopResult = false;
+    var stopped = s.stop(); IntegrationSamples.cycle();
+    return !stopped && s.getMotionCount() == 1 && IntegrationSensor.listener != null;
+}
+(:test) function integrationDiscardFailureKeepsSampling(logger) {
+    var s = IntegrationSamples.session(); IntegrationRecording.discardResult = false;
+    var discarded = s.discard(); IntegrationSamples.cycle(); return !discarded && s.getMotionCount() == 1 && IntegrationSensor.listener != null;
+}
+(:test) function integrationDiscardSuccessReleases(logger) {
+    var s = IntegrationSamples.session(); IntegrationSamples.cycle();
+    return s.discard() && IntegrationSensor.listener == null && s.getMotionCount() == 1;
+}
+(:test) function integrationRepeatedStartResets(logger) {
+    var s = IntegrationSamples.session(); IntegrationSamples.cycle(); s.stop(); s.save(); s.start();
+    var fresh = s.getMotionCount() == null; IntegrationSamples.batch(0,50);
+    return fresh && s.getMotionCount() == 0;
+}
+(:test) function integrationNativeAverage(logger) {
+    var s = IntegrationSamples.session(); IntegrationSamples.cycle(); IntegrationSamples.cycle();
+    IntegrationActivity.info.timerTime = 10000; return IntegrationSamples.near(s.getAverageMotionCadence(),12);
+}
+(:test) function integrationNoSamplesFitDeferred(logger) {
+    var s = IntegrationSamples.session(); s.stop(); var ok = s.save();
+    return ok && s.getMotionCount() == null && s.getAverageMotionCadence() == null && IntegrationRecording.creations == 0;
+}
+(:test) function integrationFitFieldsAndBeforeStop(logger) {
+    var s = IntegrationSamples.session(); IntegrationSamples.cycle(); IntegrationActivity.info.timerTime = 2000; s.stop();
+    var n = IntegrationRecording.nativeSession as IntegrationNativeSession; var f = n.fields as Lang.Array<IntegrationField>;
+    return f.size() == 2 && f[0].id == 0 && f[0].type == FitContributor.DATA_TYPE_UINT32 && f[0].opts[:mesgType] == FitContributor.MESG_TYPE_SESSION && f[0].opts[:units].equals("cycles") &&
+        f[1].id == 1 && f[1].type == FitContributor.DATA_TYPE_FLOAT && f[1].opts[:mesgType] == FitContributor.MESG_TYPE_SESSION && f[1].opts[:units].equals("cycles/min") && n.stopCount == 1 && IntegrationSamples.near(n.stopAverage,30);
+}
+(:test) function integrationFitCreationFailureAllowsSave(logger) {
+    var s = IntegrationSamples.session(); IntegrationRecording.fitFail = true; IntegrationSamples.cycle(); IntegrationSamples.cycle();
+    return s.stop() && s.save() && s.getMotionCount() == 2 && IntegrationRecording.creations == 1;
+}
+(:test) function integrationFitWriteFailureAllowsSave(logger) {
+    var s = IntegrationSamples.session(); IntegrationRecording.writeFail = true; IntegrationSamples.cycle();
+    return s.stop() && s.save() && s.getMotionCount() == 1;
+}
+(:test) function integrationZeroDurationAverage(logger) {
+    var s = IntegrationSamples.session(); IntegrationSensor.emit(new IntegrationData(new IntegrationAxes([0],[0],[0])));
+    return s.getAverageMotionCadence() == null && IntegrationRecording.nativeSession.fields.size() == 1;
+}
+
+(:test) function integrationUiPageSwitchKeepsRecording(logger) {
+    IntegrationSamples.reset(); var app = IntegrationApplication.app; var d = new ForgeDelegate();
+    d.onSelect(); var listener = IntegrationSensor.listener; d.onNextPage(); IntegrationSamples.cycle();
+    return app.getMetricsPage() == 1 && app.getUiState() == ForgeState.UI_RECORDING && app.getSession().getMotionCount() == 1 && listener == IntegrationSensor.listener;
+}
+(:test) function integrationUiBothDirectionsSwitch(logger) {
+    IntegrationSamples.reset(); var app = IntegrationApplication.app; var d = new ForgeDelegate(); d.onSelect();
+    var handledUp = d.onPreviousPage(); var first = app.getMetricsPage() == 1;
+    var handledDown = d.onNextPage(); return handledUp && first && handledDown && app.getMetricsPage() == 0;
+}
+(:test) function integrationUiConfirmationPreservesPage(logger) {
+    IntegrationSamples.reset(); var app = IntegrationApplication.app; var d = new ForgeDelegate(); d.onSelect(); d.onNextPage(); d.onBack();
+    var before = app.getConfirmSelection(); d.onPreviousPage(); var selection = app.getConfirmSelection();
+    IntegrationSamples.cycle(); d.onBack();
+    return selection == before-1 && app.getMetricsPage() == 1 && app.getUiState() == ForgeState.UI_RECORDING && app.getSession().getMotionCount() == 1;
+}
+(:test) function integrationUiSummaryAndSave(logger) {
+    IntegrationSamples.reset(); var app = IntegrationApplication.app; var d = new ForgeDelegate(); d.onSelect(); d.onNextPage(); IntegrationSamples.cycle();
+    IntegrationClock.time += 600; d.onSelect(); var summary = app.getUiState() == ForgeState.UI_SUMMARY && app.getMetricsPage() == 1 && IntegrationSensor.listener == null;
+    d.onPreviousPage(); var durationPage = app.getMetricsPage() == 0;
+    IntegrationClock.time += 600; d.onSelect(); return summary && durationPage && app.getUiState() == ForgeState.UI_SAVED;
+}
+(:test) function integrationUiReadyDoesNotSwitch(logger) {
+    IntegrationSamples.reset(); var app = IntegrationApplication.app; var d = new ForgeDelegate();
+    return !d.onPreviousPage() && !d.onNextPage() && app.getMetricsPage() == 0 && app.getUiState() == ForgeState.UI_READY;
+}
+(:test) function integrationUiNewStartDefaultsPage(logger) {
+    IntegrationSamples.reset(); var app = IntegrationApplication.app; var d = new ForgeDelegate(); d.onSelect(); d.onNextPage(); IntegrationSamples.cycle();
+    IntegrationClock.time += 600; app.discardSession(); IntegrationClock.time += 600; d.onSelect();
+    return app.getMetricsPage() == 0 && app.getSession().getMotionCount() == null && app.getUiState() == ForgeState.UI_RECORDING;
+}
+(:test) function integrationUiShutdownAlwaysReleasesMotion(logger) {
+    IntegrationSamples.reset(); var app = IntegrationApplication.app; app.startSession(); IntegrationRecording.discardResult = false; app.onStop(null);
+    return IntegrationSensor.listener == null && app.getSession().getState() == ForgeState.SESSION_RECORDING;
+}
+
+module IntegrationTimestampSamples {
+    var sampleTime = 0;
+    function batch(value, size, interval) {
+        var x=[];var y=[];var z=[];var times=[];
+        for (var i=0;i<size;i+=1) { x.add(value);y.add(0);z.add(0);sampleTime+=interval;times.add(sampleTime); }
+        var axes = new IntegrationAxes(x,y,z);axes.timestamp=times;
+        IntegrationClock.time += 1000; IntegrationSensor.emit(new IntegrationData(axes));
+    }
+    function cycle() { batch(90,8,50);batch(-90,8,50);batch(0,3,50); }
+}
+(:test) function integrationTimestampIntervals(logger) {
+    IntegrationSamples.reset(); IntegrationTimestampSamples.sampleTime=-2147483600;var m=new ForgeMotion();m.start(null);
+    IntegrationTimestampSamples.cycle();IntegrationTimestampSamples.cycle();
+    return m.getCount()==2 && IntegrationSamples.near(m.getCadence(),60000.0/950.0) && (IntegrationSensor.options[:gyroscope] as Lang.Dictionary)[:includeTimestamps];
+}
+(:test) function integrationTimestampGap(logger) {
+    IntegrationSamples.reset();IntegrationTimestampSamples.sampleTime=2147483500;var m=new ForgeMotion();m.start(null);
+    IntegrationTimestampSamples.batch(90,8,50);IntegrationTimestampSamples.sampleTime+=500;
+    IntegrationTimestampSamples.batch(-90,8,50);IntegrationTimestampSamples.batch(0,3,50);
+    return m.getCount()==0;
+}
+(:test) function integrationOldApiNominalFallback(logger) {
+    IntegrationSamples.reset();IntegrationClock.settings.monkeyVersion=[3,3,0];var m=new ForgeMotion();m.start(null);IntegrationSamples.cycle();
+    return m.getCount()==1 && !(IntegrationSensor.options[:gyroscope] as Lang.Dictionary).hasKey(:includeTimestamps);
+}
+
+(:test) function integrationMissingAccelStillCountsGyro(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null);
+    var d = new IntegrationData(new IntegrationAxes([90],[0],[0])); d.accelerometerData = null; IntegrationSensor.emit(d);
+    var missing = m.getAccelStatus().equals("missing"); IntegrationSamples.cycle();
+    return missing && m.getCount() == 1;
+}
+(:test) function integrationMalformedAccelStillCountsGyro(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.cycle();
+    var d = new IntegrationData(new IntegrationAxes([0],[0],[0])); d.accelerometerData = new IntegrationAxes([0,0],[0],[1000,1000]); IntegrationSensor.emit(d);
+    var malformed = m.getAccelStatus().equals("missing");
+    d.accelerometerData = new IntegrationAxes(["bad"],[0],[1000]); IntegrationSensor.emit(d);
+    return malformed && m.getAccelStatus().equals("missing") && m.getCount() == 1;
+}
+(:test) function integrationAccelDiagnosticFreezeAndReset(logger) {
+    IntegrationSamples.reset(); var m = new ForgeMotion(); m.start(null); IntegrationSamples.batch(0,50);
+    var active = m.getAccelStatus().equals("active"); IntegrationClock.time += 3000;
+    var stale = m.getAccelStatus().equals("stale"); m.stop(); IntegrationClock.time += 3000;
+    IntegrationSensor.late.invoke(new IntegrationData(new IntegrationAxes([0],[0],[0])));
+    var frozen = m.getAccelStatus().equals("stale"); m.start(null);
+    return active && stale && frozen && m.getAccelStatus().equals("waiting") && m.getCount() == null;
+}
+(:test) function integrationUnsupportedAccelStillCountsGyro(logger) {
+    IntegrationSamples.reset(); IntegrationSensor.accelRate = 0; var m = new ForgeMotion(); m.start(null); IntegrationSamples.cycle();
+    return m.getAccelStatus().equals("unsupported") && m.getCount() == 1 && !IntegrationSensor.options.hasKey(:accelerometer);
+}
